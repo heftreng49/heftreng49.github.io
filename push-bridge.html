@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>Heftreng Push Bridge</title>
+  <!-- Bu sayfa gizli iframe olarak yüklenir, kullanıcı görmez -->
+  <style>body{margin:0;background:transparent}</style>
+</head>
+<body>
+
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js"></script>
+<script>
+'use strict';
+
+var VAPID_KEY = 'BHX0KZc95-b-_Aj5MqMNYBVN0ZChg92qMi1YoqxRjLJMqqJWVX6XVqEaK_ljjww3ZZkr-acCHeKRweXiZppbAY4';
+var ALLOWED_ORIGIN = 'https://heft-reng.blogspot.com';
+
+firebase.initializeApp({
+  apiKey:            'AIzaSyCZByW_n4B888Ec4cjNQDoQovU-rVN75gs',
+  authDomain:        'bloggerheftreng.firebaseapp.com',
+  projectId:         'bloggerheftreng',
+  storageBucket:     'bloggerheftreng.firebasestorage.app',
+  messagingSenderId: '854520441903',
+  appId:             '1:854520441903:web:3972b80e9c97d922cfaada'
+});
+
+var messaging = firebase.messaging();
+
+/* ── Temadan gelen mesajları dinle ── */
+window.addEventListener('message', function(e) {
+  if (e.origin !== ALLOWED_ORIGIN) return;
+
+  if (e.data && e.data.type === 'HF_PUSH_INIT') {
+    initPush(e.data.uid);
+  }
+  if (e.data && e.data.type === 'HF_PUSH_DISABLE') {
+    disablePush(e.data.uid);
+  }
+});
+
+/* ── Push izni al ve token kaydet ── */
+function initPush(uid) {
+  if (!('serviceWorker' in navigator)) {
+    sendBack({ type: 'HF_PUSH_ERROR', error: 'SW desteklenmiyor' });
+    return;
+  }
+
+  navigator.serviceWorker.register('/firebase-messaging-sw.js')
+    .then(function(reg) {
+      return Notification.requestPermission().then(function(permission) {
+        if (permission !== 'granted') {
+          sendBack({ type: 'HF_PUSH_DENIED' });
+          return;
+        }
+        return messaging.getToken({
+          vapidKey: VAPID_KEY,
+          serviceWorkerRegistration: reg
+        });
+      });
+    })
+    .then(function(token) {
+      if (!token) return;
+      sendBack({ type: 'HF_PUSH_TOKEN', token: token, uid: uid });
+    })
+    .catch(function(err) {
+      sendBack({ type: 'HF_PUSH_ERROR', error: err.message });
+    });
+}
+
+/* ── Token sil (bildirim kapat) ── */
+function disablePush(uid) {
+  messaging.deleteToken()
+    .then(function() {
+      sendBack({ type: 'HF_PUSH_DISABLED', uid: uid });
+    })
+    .catch(function() {});
+}
+
+/* ── Ön planda gelen bildirimler ── */
+messaging.onMessage(function(payload) {
+  sendBack({ type: 'HF_PUSH_FOREGROUND', payload: payload });
+});
+
+/* ── Temaya mesaj gönder ── */
+function sendBack(data) {
+  if (window.parent && window.parent !== window) {
+    window.parent.postMessage(data, ALLOWED_ORIGIN);
+  }
+}
+
+/* Hazır sinyali gönder */
+sendBack({ type: 'HF_PUSH_READY' });
+</script>
+</body>
+</html>
